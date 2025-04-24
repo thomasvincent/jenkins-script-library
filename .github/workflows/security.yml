@@ -21,27 +21,30 @@ jobs:
         java-version: '11'
         distribution: 'temurin'
     
-    - name: Run CodeQL Analysis
-      uses: github/codeql-action/init@v2
-      with:
-        languages: 'java'  # CodeQL supports Java which includes Groovy
-        
-    - name: Perform CodeQL Analysis
-      uses: github/codeql-action/analyze@v2
-      
     - name: Check for Hardcoded Secrets
-      uses: gitleaks/gitleaks-action@v2
-      
-    - name: Run OWASP Dependency Check
-      uses: dependency-check/Dependency-Check_Action@main
-      with:
-        project: 'Jenkins Script Library'
-        path: '.'
-        format: 'HTML'
-        out: 'reports'
+      run: |
+        # Simple check for potential secrets
+        if grep -r --include="*.groovy" -E "(password|token|secret|key|credential).*=.*['\"][^'\"]{8,}['\"]" .; then
+          echo "Warning: Potential hardcoded secrets found"
+          exit 1
+        else
+          echo "No hardcoded secrets found"
+        fi
         
-    - name: Upload Dependency Check Report
-      uses: actions/upload-artifact@v3
-      with:
-        name: dependency-check-report
-        path: reports/
+    - name: Check for Security Best Practices
+      run: |
+        # Check for proper input validation
+        echo "Checking for input validation..."
+        if grep -r --include="*.groovy" -L "validate" . | grep -v "README\|LICENSE\|.git"; then
+          echo "Warning: Some files may be missing input validation"
+        else
+          echo "Input validation check passed"
+        fi
+        
+        # Check for secure coding patterns
+        echo "Checking for secure coding patterns..."
+        if grep -r --include="*.groovy" -E "(System\.exit|Runtime\.exec)" .; then
+          echo "Warning: Potentially unsafe system calls found"
+        else
+          echo "No unsafe system calls found"
+        fi

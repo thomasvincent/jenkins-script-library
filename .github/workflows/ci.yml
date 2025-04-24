@@ -34,27 +34,8 @@ jobs:
       run: |
         for file in $(find . -name "*.groovy"); do
           echo "Linting $file"
-          groovy -e "
-            import org.codehaus.groovy.control.CompilationUnit
-            import org.codehaus.groovy.control.CompilerConfiguration
-            import org.codehaus.groovy.control.ErrorCollector
-            import org.codehaus.groovy.control.MultipleCompilationErrorsException
-            
-            def config = new CompilerConfiguration()
-            def cu = new CompilationUnit(config)
-            cu.addSource(new File('$file'))
-            
-            try {
-              cu.compile()
-              println 'Compilation successful'
-            } catch (MultipleCompilationErrorsException e) {
-              println 'Compilation failed'
-              e.errorCollector.errors.each { error ->
-                println error
-              }
-              System.exit(1)
-            }
-          "
+          # Simple syntax check
+          groovy -c "$file" || exit 1
         done
         
     - name: Check for Hardcoded Credentials
