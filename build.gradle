@@ -36,7 +36,7 @@ configurations {
 
 dependencies {
     // Groovy 4.0.14 - Current supported version as of 2025
-    implementation platform('org.apache.groovy:groovy-bom:4.0.14')
+    implementation platform('org.apache.groovy:groovy-bom:4.0.26')
     implementation 'org.apache.groovy:groovy'
     implementation 'org.apache.groovy:groovy-cli-commons'
     implementation 'org.apache.groovy:groovy-json'
