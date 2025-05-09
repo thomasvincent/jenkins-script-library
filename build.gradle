@@ -40,7 +40,7 @@ dependencies {
     
     // Standard dependencies
     implementation 'org.apache.logging.log4j:log4j-api:2.20.0'
-    implementation 'org.apache.logging.log4j:log4j-core:2.20.0'
+    implementation 'org.apache.logging.log4j:log4j-core:2.24.3'
     
     // Jenkins dependencies - marked as provided since they're provided by Jenkins
     compileOnly 'javax.annotation:javax.annotation-api:1.3.2'
