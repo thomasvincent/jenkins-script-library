@@ -36,7 +36,7 @@ jobs:
           build/libs/jenkins-script-library-*.jar
         
     - name: Build and push Docker image
-      uses: docker/build-push-action@v3
+      uses: docker/build-push-action@v6
       with:
         context: .
         push: false
