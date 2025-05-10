@@ -61,7 +61,12 @@ ext {
     
     // Detect Java version
     javaVersion = System.getProperty('java.version')
-    isJava11Plus = javaVersion.startsWith('11.') || javaVersion.startsWith('17.') || Integer.parseInt(javaVersion.split('\\.')[0]) >= 11
+    
+    // Handle both legacy version format (1.8.0_xxx) and new format (11.0.x, 17.0.x, etc.)
+    def isJava8 = javaVersion.startsWith('1.8')
+    
+    // For Java 9+ in both old and new version formats
+    isJava11Plus = !isJava8
     
     // Select version set based on Java version
     versions = isJava11Plus ? java11Plus : java8
@@ -114,9 +119,6 @@ dependencies {
 
 java {
     // Support both Java 8 and Java 11+
-    def javaVersion = System.getProperty('java.version')
-    def isJava11Plus = javaVersion.startsWith('11.') || javaVersion.startsWith('17.') || Integer.parseInt(javaVersion.split('\\.')[0]) >= 11
-    
     if (isJava11Plus) {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
@@ -169,8 +171,8 @@ jacoco {
 
 jacocoTestReport {
     reports {
-        xml.enabled true
-        html.enabled true
+        xml.required = true
+        html.required = true
     }
 }
 
@@ -215,10 +217,7 @@ check.dependsOn integrationTest
 tasks.withType(GroovyCompile) {
     groovyOptions.optimizationOptions.indy = true
     
-    // Use same Java version detection logic as in java block
-    def javaVersion = System.getProperty('java.version')
-    def isJava11Plus = javaVersion.startsWith('11.') || javaVersion.startsWith('17.') || Integer.parseInt(javaVersion.split('\\.')[0]) >= 11
-    
+    // Use the same Java version detection logic from ext block
     if (isJava11Plus) {
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
