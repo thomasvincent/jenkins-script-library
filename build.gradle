@@ -65,6 +65,11 @@ ext {
     
     // Select version set based on Java version
     versions = isJava11Plus ? java11Plus : java8
+    
+    // Print debug information
+    println "Detected Java version: ${javaVersion}"
+    println "Using Java 11+ mode: ${isJava11Plus}"
+    println "Selected Jenkins core: ${versions.jenkinsCore}"
 }
 
 dependencies {
