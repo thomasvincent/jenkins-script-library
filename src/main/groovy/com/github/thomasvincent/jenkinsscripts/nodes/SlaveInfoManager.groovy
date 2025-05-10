@@ -59,7 +59,9 @@ import java.util.logging.Logger
 class SlaveInfoManager {
 
     private static final Logger LOGGER = Logger.getLogger(SlaveInfoManager.class.getName())
-    private static final SimpleDateFormat DATE_FORMATTER = new SimpleDateFormat("yyyy-MM-dd HH:mm")
+    private static final ThreadLocal<SimpleDateFormat> DATE_FORMATTER = ThreadLocal.withInitial({ 
+        new SimpleDateFormat("yyyy-MM-dd HH:mm") 
+    })
     
     private final Jenkins jenkins
     
@@ -205,7 +207,7 @@ class SlaveInfoManager {
                     privateIp: instance.getPrivateIpAddress(),
                     publicIp: instance.getPublicIpAddress(),
                     amiId: instance.getImageId(),
-                    launchTime: instance.getLaunchTime() ? DATE_FORMATTER.format(instance.getLaunchTime()) : null,
+                    launchTime: instance.getLaunchTime() ? DATE_FORMATTER.get().format(instance.getLaunchTime()) : null,
                     state: instance.getState()?.getName(),
                     tags: instance.getTags()?.collectEntries { [(it.key): it.value] }
                 ]
@@ -231,7 +233,7 @@ class SlaveInfoManager {
      */
     private void addStandardComputerInfo(Map<String, Object> info, Computer computer) {
         info.hostName = computer.hostName
-        info.connectionTime = computer.connectTime > 0 ? DATE_FORMATTER.format(new Date(computer.connectTime)) : null
+        info.connectionTime = computer.connectTime > 0 ? DATE_FORMATTER.get().format(new Date(computer.connectTime)) : null
         info.offlineCause = computer.offlineCause?.getShortDescription()
     }
     

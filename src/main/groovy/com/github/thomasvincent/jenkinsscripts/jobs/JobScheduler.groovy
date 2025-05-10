@@ -456,6 +456,66 @@ class JobScheduler {
             return 3  // Lightly throttle concurrent jobs
         }
     }
+
+    /**
+     * Counts the number of currently running builds for a specific job.
+     * @param jobFullName The full name of the job.
+     * @return The number of currently building instances of the job, or 0 if job not found.
+     */
+    private int countRunningBuildsForJob(String jobFullName) {
+        if (!jobFullName) {
+            return 0
+        }
+
+        Job job = jenkins.getItemByFullName(jobFullName, Job.class)
+        if (!job) {
+            LOGGER.fine("Job not found while counting running builds: ${jobFullName}")
+            return 0
+        }
+
+        return ErrorHandler.withErrorHandling("counting running builds for job ${jobFullName}", {
+            // Ensure getBuilds() doesn't return null; it typically returns an empty list.
+            return (job.getBuilds() ?: []).count { Run build ->
+                build.isBuilding()
+            }
+        }, LOGGER, 0)
+    }
+
+    /**
+     * Counts the number of currently running builds on nodes assigned to a specific label.
+     * @param labelName The name of the label.
+     * @return The total number of builds currently running on agents with this label.
+     */
+    private int countRunningBuildsForLabel(String labelName) {
+        if (!labelName) {
+            return 0
+        }
+
+        Label label = jenkins.getLabel(labelName)
+        if (label == null) {
+            LOGGER.fine("Label not found while counting running builds: ${labelName}")
+            return 0
+        }
+
+        return ErrorHandler.withErrorHandling("counting running builds for label ${labelName}", {
+            int count = 0
+            // Iterate through nodes associated with the label
+            label.getNodes().each { Node node ->
+                Computer computer = node.toComputer()
+                if (computer != null && !computer.isOffline()) {
+                    computer.getExecutors().each { Executor executor ->
+                        if (executor.isBusy()) {
+                            // This counts any busy executor on a node with the label.
+                            // It doesn't check if the specific running job requires this specific label,
+                            // which is a common simplification for label-based concurrency.
+                            count++
+                        }
+                    }
+                }
+            }
+            return count
+        }, LOGGER, 0)
+    }
 }
 
 /**
@@ -472,59 +532,58 @@ class ThrottleConfig {
     }
     
     /**
-     * Checks if a new build is allowed under this throttle config.
-     * 
-     * @return true if allowed, false if throttled
+     * Checks if a new build is allowed to start under this throttle config.
+     * Considers both immediate concurrency and rate limiting over a period.
+     *
+     * @param currentRunningExecutions Number of instances currently running for the associated job/label.
+     * @return true if allowed to start, false if throttled.
      */
-    boolean isAllowed() {
-        // Check max concurrent limit
-        if (countCurrentExecutions() >= maxConcurrent) {
+    boolean isAllowedToStart(int currentRunningExecutions) {
+        // Check immediate concurrency limit
+        // This assumes maxConcurrent is a hard cap on simultaneous builds regardless of period.
+        if (currentRunningExecutions >= maxConcurrent) {
             return false
         }
-        
-        // Check rate limit if applicable
+
+        // Check rate limit if periodSeconds is defined
         if (periodSeconds > 0) {
-            long cutoffTime = System.currentTimeMillis() - (periodSeconds * 1000)
-            int recentExecutions = 0
-            
-            // Count executions within the time period
-            executionTimes.each { timestamp ->
-                if (timestamp >= cutoffTime) {
-                    recentExecutions++
-                }
+            long cutoffTime = System.currentTimeMillis() - (periodSeconds * 1000L) // Ensure long arithmetic
+
+            // Count executions within the recent time period
+            int recentPastExecutions = executionTimes.count { timestamp ->
+                timestamp >= cutoffTime
             }
-            
-            if (recentExecutions >= maxConcurrent) {
-                return false
+
+            // 'maxConcurrent' also serves as the count for the rate limit within the period
+            if (recentPastExecutions >= maxConcurrent) {
+                return false // Rate limit for the period exceeded
             }
         }
-        
-        return true
+
+        return true // Allowed by both concurrency and rate limits
     }
-    
+
     /**
      * Records a new execution under this throttle.
+     * Call this AFTER isAllowedToStart returns true and the build actually starts.
      */
     void recordExecution() {
-        executionTimes.add(System.currentTimeMillis())
-        
-        // Clean up old timestamps
+        long currentTime = System.currentTimeMillis()
+        executionTimes.add(currentTime)
+
+        // Clean up old timestamps if rate limiting is active, to prevent list from growing indefinitely
         if (periodSeconds > 0) {
-            long cutoffTime = System.currentTimeMillis() - (periodSeconds * 1000)
-            executionTimes.removeAll { it < cutoffTime }
+            // Keep a bit more than the period to handle edge cases with clock sync or slight delays
+            // A simple cleanup: remove entries older than 2x period, or a sufficiently large window.
+            // This ensures the list doesn't grow unbounded over a very long time
+            // while still keeping enough history for the rate calculation.
+            long cleanupCutoffTime = currentTime - (periodSeconds * 1000L * 2) 
+            executionTimes.removeAll { timestamp ->
+                timestamp < cleanupCutoffTime
+            }
         }
     }
-    
-    /**
-     * Counts current executions (for concurrent limit).
-     * 
-     * @return Number of current executions
-     */
-    private int countCurrentExecutions() {
-        // In a real implementation, this would query Jenkins
-        // to count actual running builds for the job
-        return 0
-    }
+    // Removed private int countCurrentExecutions()
 }
 
 /**

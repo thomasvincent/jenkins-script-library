@@ -26,15 +26,8 @@ package com.github.thomasvincent.jenkinsscripts.jobs
 
 import jenkins.model.Jenkins
 import hudson.model.Job
-import hudson.model.TopLevelItem
 import hudson.model.AbstractItem
-import hudson.model.Item
-import org.apache.commons.io.FileUtils
-import java.io.File
-import java.io.FileInputStream
-import java.io.FileOutputStream
-import java.io.ByteArrayOutputStream
-import java.io.ByteArrayInputStream
+// File classes (File, streams) are part of java.io, which is automatically imported in Groovy
 import java.util.zip.ZipOutputStream
 import java.util.zip.ZipEntry
 import java.util.zip.ZipInputStream
@@ -47,6 +40,7 @@ import com.github.thomasvincent.jenkinsscripts.util.ErrorHandler
 import java.util.logging.Level
 import java.util.logging.Logger
 import java.text.SimpleDateFormat
+import java.text.ParseException
 
 /**
  * Manages archival and restoration of Jenkins jobs.
@@ -58,8 +52,13 @@ import java.text.SimpleDateFormat
  */
 class JobArchivalManager {
     private static final Logger LOGGER = Logger.getLogger(JobArchivalManager.class.getName())
-    private static final SimpleDateFormat DATE_FORMAT = new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss")
-    
+    private static final ThreadLocal<SimpleDateFormat> FILENAME_DATE_FORMAT = ThreadLocal.withInitial({ 
+        new SimpleDateFormat("yyyy-MM-dd_HH-mm-ss") 
+    })
+    private static final ThreadLocal<SimpleDateFormat> METADATA_TIMESTAMP_FORMAT = ThreadLocal.withInitial({ 
+        new SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ssZ") 
+    })
+
     private final Jenkins jenkins
     private final File archiveDir
     
@@ -119,9 +118,9 @@ class JobArchivalManager {
         
         return ErrorHandler.withErrorHandling("archiving job ${jobName}", {
             // Create archive file name
-            String timestamp = DATE_FORMAT.format(new Date())
+            String fileTimestamp = FILENAME_DATE_FORMAT.get().format(new Date())
             String safeJobName = jobName.replaceAll("[^a-zA-Z0-9.-]", "_")
-            String archiveFileName = "${safeJobName}_${timestamp}.zip"
+            String archiveFileName = "${safeJobName}_${fileTimestamp}.zip"
             File archiveFile = new File(archiveDir, archiveFileName)
             
             // Extract job config and create metadata
@@ -424,13 +423,13 @@ class JobArchivalManager {
     private Map<String, Object> createArchiveMetadata(Job job, String reason, Map<String, String> metadata) {
         Map<String, Object> archiveMetadata = [
             jobName: job.fullName,
-            timestamp: new Date().toString(),
+            timestamp: METADATA_TIMESTAMP_FORMAT.get().format(new Date()), // Use standardized format
             reason: reason,
             jenkinsVersion: jenkins.version,
             lastBuild: job.getLastBuild()?.getNumber() ?: "None",
             additionalMetadata: metadata ?: [:]
         ]
-        
+
         return archiveMetadata
     }
     
@@ -573,13 +572,24 @@ class JobArchivalManager {
      */
     private Date parseDate(String dateStr) {
         if (!dateStr) {
-            return new Date()
+            LOGGER.warning("Timestamp string is null or empty in archive metadata, using current date as fallback.")
+            return new Date() // Or handle as an error / null
         }
-        
+
         try {
-            return new Date(dateStr)
-        } catch (Exception e) {
-            LOGGER.warning("Error parsing date ${dateStr}: ${e.message}")
+            // Use the defined SimpleDateFormat to parse
+            return METADATA_TIMESTAMP_FORMAT.get().parse(dateStr)
+        } catch (ParseException e) { // Be specific with exception for known format
+            LOGGER.log(Level.WARNING, "Error parsing date string '${dateStr}' with standard format: ${e.getMessage()}. Attempting fallback.", e)
+            // Attempt fallback for old format (Date.toString()) - this is best-effort
+            try {
+                return new Date(dateStr) // Deprecated, but for existing data
+            } catch (IllegalArgumentException iae) {
+                LOGGER.log(Level.WARNING, "Fallback parsing of date string '${dateStr}' also failed: ${iae.getMessage()}. Using current date.", iae)
+                return new Date()
+            }
+        } catch (Exception e) { // Catch other unexpected exceptions during parsing
+            LOGGER.log(Level.WARNING, "Unexpected error parsing date string '${dateStr}': ${e.getMessage()}. Using current date as fallback.", e)
             return new Date()
         }
     }
