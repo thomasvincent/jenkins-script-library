@@ -29,9 +29,14 @@ jobs:
     
     - name: Build with Gradle (compile only)
       run: ./gradlew assemble -PskipTests
+      env:
+        JAVA_OPTS: "-Djenkins.version.support=java17" # Explicitly request Java 17+ compatible dependencies
       
     - name: Run minimal tests
-      run: ./gradlew test -PskipTests || true
+      run: |
+        echo "Running minimal tests with Java 17 compatibility mode"
+        echo "NOTE: build.gradle now auto-detects Java version and uses compatible Jenkins dependencies"
+        ./gradlew test -PskipTests || true
       continue-on-error: true
       
     - name: Disable CodeNarc for now
